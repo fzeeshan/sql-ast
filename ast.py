@@ -42,12 +42,15 @@ class Or(BinaryNode):
 class List(ASTNode):
 
     def __init__(self, *args):
+        for arg in args:
+            if hasattr(arg, 'inline'):
+                arg.inline = True
         self.items = args
 
     def __str__(self):
         lst = ', '.join(map(lambda x: str(x), self.items))
         if self.inline:
-            lst = '({0})'.format(lst)
+            lst = '(' + lst + ')'
         return lst
 
 
@@ -77,9 +80,7 @@ class Where(ASTNode):
         self.logic = logic
 
     def __str__(self):
-        return "WHERE {logic}".format(
-            logic=self.logic
-        )
+        return "WHERE " + str(self.logic)
 
 
 class From(ASTNode):
@@ -93,22 +94,39 @@ class From(ASTNode):
         return 'FROM {_from}'.format(_from=self._from)
 
 
-class Select(ASTNode):
-    template = "SELECT {what} {_from} {where}"
-
-    def __init__(self, _from, what=_all, where=empty):
-        self._from = From(_from)
-        self.what = what
-        self.where = where and Where(where)
+class Joins(list):
 
     def __str__(self):
+        return ' '.join(map(lambda x: str(x), self))
+
+
+class Join(ASTNode):
+    
+    def __init__(self, what, _on):
+        self.what = what
+        self._on = _on
+
+    def __str__(self):
+        s = 'JOIN ' + self.what + ' ON ' + self._on
         if self.inline:
-            self.template = "(SELECT {what} {_from} {where})"
-        return self.template.format(
-            what=self.what,
-            _from=self._from,
-            where=self.where
-        )
+            s = '(' + s + ')'
+        return s
+
+
+class Select(ASTNode):
+
+    def __init__(self, _from, what=_all, where=empty, joins=[]):
+        self._from = _from
+        self.what = what
+        self.where = where and Where(where)
+        self.inlint = False
+        self.joins = Joins(joins)
+
+    def __str__(self):
+        s = 'SELECT ' + str(self.what) + ' FROM ' + str(self._from) + ' ' + str(self.joins) + ' ' + str(self.where)
+        if self.inline:
+            s = '(' + s + ')'
+        return s
 
 
 class Delete(ASTNode):
@@ -165,46 +183,3 @@ class Update(ASTNode):
             where=self.where,
             returning=self.returning
         )
-
-
-fields = List('maker', 'mark', 'year')
-_from = 'cars'
-where = And('year>2010', 'maker="Dodge"')
-
-select = Select(_from, fields, where)
-print select
-
-select = Select(select, fields, where)
-print select
-
-select = Select(_from, fields)
-print select
-
-
-delete = Delete(_from, returning=_all)
-print delete
-
-delete = Delete(_from, returning=fields)
-print delete
-
-delete = Delete(_from, returning=fields, where=Or('maker=1', And('1=1', Or('mark="Audi"', 'year<>2012'))))
-print delete
-
-
-insert = Insert(_from)
-print insert
-
-fields = List('maker', 'mark', 'year')
-template = List('%(maker)s', '%(mark)s', '%(year)s')
-insert = Insert(_from, fields=fields, values=template)
-print insert
-
-
-update = Update('cars', {'year': 2010}, returning=_all)
-print update
-
-update = Update('cars', {'year': 2010}, where=where, returning='id')
-print update
-
-update = Update('cars', {'year': 2010}, _from=Select('jobs'), where=where, returning='id')
-print update
